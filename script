@@ -1,0 +1,31 @@
+function doGet(e) {
+  Logger.log(JSON.stringify(e)); // Log the incoming request for debugging
+
+  // Check if the 'e' object and 'e.parameter.name' exist
+  if (!e || !e.parameter || !e.parameter.name) {
+    return ContentService.createTextOutput("Missing or undefined parameters.");
+  }
+
+  // Retrieve the 'name' parameter value
+  var name = stripQuotes(e.parameter.name);
+  Logger.log("Name received: " + name);
+
+  // Write to Google Sheet
+  var timezone = "Asia/Manila";
+  var Curr_Date = new Date();
+  var Curr_Time = Utilities.formatDate(Curr_Date, timezone, 'HH:mm:ss');
+  var ss = SpreadsheetApp.openById('11eI9HjerMCvbFDjZHwFqWVa-Ap2WRMz_S_gHgj8b6RM'); // Replace with your Sheet ID
+  var sheet = ss.getSheetByName('Sheet1'); // Replace 'Sheet1' with the name of your sheet
+  var nextRow = sheet.getLastRow() + 1;
+
+  sheet.getRange("A" + nextRow).setValue(Curr_Date);
+  sheet.getRange("B" + nextRow).setValue(Curr_Time);
+  sheet.getRange("C" + nextRow).setValue(name);
+
+  // Return a response to the client
+  return ContentService.createTextOutput("Card holder name is stored in column C");
+}
+
+function stripQuotes(value) {
+  return value ? value.toString().replace(/^["']|['"]$/g, "") : "";
+}
