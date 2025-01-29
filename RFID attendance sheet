@@ -3,14 +3,13 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
 #include <WiFiClientSecureBearSSL.h>
 #include <LiquidCrystal_I2C.h>
 
 //-----------------------------------------
 #define RST_PIN  D3
 #define SS_PIN   D4
-#define BUZZER   D2
+#define BUZZER   D0
 //-----------------------------------------
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 MFRC522::MIFARE_Key key;  
@@ -19,17 +18,31 @@ MFRC522::StatusCode status;
 int blockNum = 2;
 byte bufferLen = 64;
 byte readBlockData[64];
+uint8_t* buffer = (uint8_t*)malloc(6200);
+
 //-----------------------------------------
 String card_holder_name;
-const String sheet_url = "https://script.google.com/macros/s/AKfycbzE8ZK6wDk9QS1w1dB__7EqbFM8kAto-IfE2h46Bn30jtXIZx9clzIdC9ztOhgmR6ba/exec";
-const uint8_t fingerprint[32] = {0xf2, 0x28, 0x7b, 0x3a, 0x1b, 0x41, 0xcf, 0x6f, 0x01, 0x73, 0xac, 0x05, 0x7f, 0xc0, 0x2a, 0x9b,
-                                 0xfe, 0x4d, 0x0f, 0x09, 0x10, 0x96, 0x29, 0xd3, 0x73, 0x91, 0xd2, 0x57, 0xf5, 0xa4, 0xbe, 0x47};
+const String sheet_url = "https://script.google.com/macros/s/AKfycbxghr01s0Tk_DdzUTuMuh0ar5uhs4iAkCqMDbiTZOirWV6s6IEeJFtHd1VSLdPWJmkg/exec";
 
+// SSL Fingerprint (Update this if necessary)
+/*const uint8_t fingerprint[32] = {
+  0x1d, 0x1e, 0x92, 0x16, 0x76, 0x74, 0x3b, 0xfb, 
+  0xea, 0x13, 0xce, 0x26, 0x23, 0xb3, 0x25, 0xce,
+  0x5e, 0xfc, 0x0d, 0xb2, 0x15, 0x28, 0x28, 0xab,
+  0x9e, 0x28, 0x8e, 0x02, 0xe2, 0x31, 0x12, 0x52
+};*/
+const uint8_t fingerprint[32] = { 
+  0x95, 0x6a, 0xbf, 0xe9, 0x3a, 0xb7, 0xab, 0x83, 
+  0x26, 0xfb, 0xca, 0x16, 0x97, 0x99, 0xeb, 0xc9,
+  0x1a, 0x5b, 0x39, 0x9b, 0xf4, 0x28, 0x1a, 0x2f,
+  0xfa, 0x86, 0x0f, 0x5a, 0x45, 0x03, 0x38, 0x1f 
+};
+// WiFi Credentials
 #define WIFI_SSID "Manangcayal123"
 #define WIFI_PASSWORD "dacueno7"
 
 // Initialize the LCD display
-LiquidCrystal_I2C lcd(0x3F, 16, 2);  
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // Try 0x27 if 0x3F doesn’t work
 
 // Function prototype
 void ReadDataFromBlock(int blockNum, byte readBlockData[]);
@@ -43,7 +56,7 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
-    delay(200);
+    delay(500);
   }
   Serial.println("\nWiFi connected. IP address: " + WiFi.localIP().toString());
 
@@ -78,50 +91,52 @@ void loop() {
   }
   Serial.println();
 
-  bool buzzerState = false;  // A flag to check if the buzzer has already buzzed
+  // Play buzzer sound
 
-  if (!mfrc522.PICC_IsNewCardPresent()) {
-    buzzerState = false; // Reset buzzer state if no card is present
-    return;
+
+  // Convert RFID data to a readable hex string
+  String rfidDataHex = "";
+  for (int i = 0; i < 16; i++) {
+    if (readBlockData[i] < 0x10) {
+      rfidDataHex += "0";  // Add leading zero for consistency
+    }
+    rfidDataHex += String(readBlockData[i], HEX);
   }
+  rfidDataHex.toUpperCase();  // Convert to uppercase for readability
 
-  if (!mfrc522.PICC_ReadCardSerial()) {
-    buzzerState = false; // Reset buzzer state if no card is read
-    return;
-  }
-  
+  card_holder_name = sheet_url + "?name=" + rfidDataHex;
+  Serial.println("Card holder name URL: " + card_holder_name);
 
-  if (!buzzerState) {
-    // Buzzer feedback only once
-    digitalWrite(BUZZER, HIGH);
-    delay(200);
-    digitalWrite(BUZZER, LOW);
-    delay(200);
-    buzzerState = true;  // Set the flag to true so it won't buzz again
-  }
-
+  // Ensure WiFi is still connected before making HTTPS requests
   if (WiFi.status() == WL_CONNECTED) {
     std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
-    client->setFingerprint(fingerprint);
+    
+    // Use setInsecure() if fingerprint verification fails
+    client->setInsecure();  // Remove this if using fingerprint
 
-    card_holder_name = sheet_url + "?name=" + String((char*)readBlockData);
-    card_holder_name.trim();
-    Serial.println("Card holder name URL: " + card_holder_name);
+    // Use fingerprint verification for security
+    // client->setFingerprint(fingerprint);  // Uncomment this for fingerprint verification
 
     HTTPClient https;
     if (https.begin(*client, card_holder_name)) {
       int httpCode = https.GET();
       if (httpCode > 0) {
         Serial.printf("[HTTPS] GET... code: %d\n", httpCode);
+        String payload = https.getString();
+        Serial.println("Response: " + payload);
       } else {
         Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
       }
       https.end();
-      delay(1000);
     } else {
       Serial.println("[HTTPS] Unable to connect");
     }
+  } else {
+    Serial.println("[WiFi] Connection lost. Reconnecting...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
+
+  delay(2000); // Small delay before scanning again
 }
 
 void ReadDataFromBlock(int blockNum, byte readBlockData[]) {
@@ -152,3 +167,4 @@ void ReadDataFromBlock(int blockNum, byte readBlockData[]) {
   // Optionally dump the card's memory layout to the serial monitor for debugging
   mfrc522.PICC_DumpToSerial(&(mfrc522.uid)); 
 }
+
