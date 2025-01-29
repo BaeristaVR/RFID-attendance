@@ -1,31 +1,52 @@
 function doGet(e) {
-  Logger.log(JSON.stringify(e)); // Log the incoming request for debugging
+  try {
+    Logger.log("Received e: " + JSON.stringify(e)); // Log the entire 'e' object for debugging
 
-  // Check if the 'e' object and 'e.parameter.name' exist
-  if (!e || !e.parameter || !e.parameter.name) {
-    return ContentService.createTextOutput("Missing or undefined parameters.");
+    // Check if the 'name' parameter exists
+    if (!e || !e.parameter || !e.parameter.name) {
+      return ContentService.createTextOutput("Missing or undefined parameters.");
+    }
+
+    // Retrieve the 'name' parameter value(s) (it could be an array if multiple names are passed)
+    var names = e.parameter.name.split(","); // Convert string to array
+
+    Logger.log("Names received: " + JSON.stringify(names));
+
+    // Write to Google Sheet
+    var timezone = "Asia/Manila";
+    var Curr_Date = new Date();
+    var formattedDate = Utilities.formatDate(Curr_Date, timezone, 'yyyy-MM-dd HH:mm:ss'); // Format date as 'yyyy-MM-dd HH:mm:ss'
+
+    var ss = SpreadsheetApp.openById('11eI9HjerMCvbFDjZHwFqWVa-Ap2WRMz_S_gHgj8b6RM'); // Replace with your Sheet ID
+    var sheet = ss.getSheetByName('Sheet1'); // Replace 'Sheet1' with the name of your sheet
+    var nextRow = sheet.getLastRow() + 1; // Get the next row to insert data
+    var cleanedName = name.replace(/\x00/g, ""); // Removes all null bytes
+
+
+    // Write the formatted date and time to column A
+    sheet.getRange("A" + nextRow).setValue(formattedDate); // Timestamp
+
+    // Write each name to a separate row (if multiple names)
+    names.forEach(function(name, index) {
+      sheet.getRange("C" + (nextRow + index)).setValue(name); // Name in column C
+    });
+
+    return ContentService.createTextOutput("Card holder name(s) stored successfully.");
+  } catch (error) {
+    Logger.log("Error: " + error.message);
+    return ContentService.createTextOutput("Error: " + error.message);
   }
-
-  // Retrieve the 'name' parameter value
-  var name = stripQuotes(e.parameter.name);
-  Logger.log("Name received: " + name);
-
-  // Write to Google Sheet
-  var timezone = "Asia/Manila";
-  var Curr_Date = new Date();
-  var Curr_Time = Utilities.formatDate(Curr_Date, timezone, 'HH:mm:ss');
-  var ss = SpreadsheetApp.openById('11eI9HjerMCvbFDjZHwFqWVa-Ap2WRMz_S_gHgj8b6RM'); // Replace with your Sheet ID
-  var sheet = ss.getSheetByName('Sheet1'); // Replace 'Sheet1' with the name of your sheet
-  var nextRow = sheet.getLastRow() + 1;
-
-  sheet.getRange("A" + nextRow).setValue(Curr_Date);
-  sheet.getRange("B" + nextRow).setValue(Curr_Time);
-  sheet.getRange("C" + nextRow).setValue(name);
-
-  // Return a response to the client
-  return ContentService.createTextOutput("Card holder name is stored in column C");
 }
 
-function stripQuotes(value) {
-  return value ? value.toString().replace(/^["']|['"]$/g, "") : "";
+function testEntry() {
+  const url = //"https://script.google.com/macros/s/AKfycbyowN6iu_KFKDELqpUtWbL45HDta0gMGNtmrK7FR6ntmMtjE6UpKFxXbMuioS-j8e8w/exec?name=testEntry";
+ "https://script.google.com/macros/s/AKfycbxghr01s0Tk_DdzUTuMuh0ar5uhs4iAkCqMDbiTZOirWV6s6IEeJFtHd1VSLdPWJmkg/execname=testEntry";
+
+  try {
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    Logger.log("Response Code: " + response.getResponseCode());
+    Logger.log("Response Content: " + response.getContentText());
+  } catch (error) {
+    Logger.log("Error: " + error.toString());
+  }
 }
