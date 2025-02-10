@@ -1,52 +1,109 @@
-function doGet(e) {
-  try {
-    Logger.log("Received e: " + JSON.stringify(e)); // Log the entire 'e' object for debugging
+// Enter Spreadsheet ID here
+var SS = SpreadsheetApp.openById('1lDFbqg_yodMeab-RpuDVevaxUMKKZUDUgnA6iQMx6yw');
+var timezone = "Asia/Manila";
+var str = "";
 
-    // Check if the 'name' parameter exists
-    if (!e || !e.parameter || !e.parameter.name) {
-      return ContentService.createTextOutput("Missing or undefined parameters.");
+function doPost(e) {
+  var parsedData;
+  var result = {};
+
+  try { 
+    parsedData = JSON.parse(e.postData.contents);
+  } catch (f) {
+    return ContentService.createTextOutput("Error in parsing request body: " + f.message);
+  }
+
+  if (parsedData !== undefined) {
+    var sheet = SS.getSheetByName(parsedData.sheet_name);
+    if (!sheet) {
+      return ContentService.createTextOutput("Error: Sheet '" + parsedData.sheet_name + "' not found.");
     }
 
-    // Retrieve the 'name' parameter value(s) (it could be an array if multiple names are passed)
-    var names = e.parameter.name.split(","); // Convert string to array
+    // Enhanced sanitization to remove non-printable/control characters, including extended ASCII
+    var sanitizedValues = parsedData.values.replace(/[^\x20-\x7E]/g, '').trim();
+    var dataArr = sanitizedValues.split(",");
 
-    Logger.log("Names received: " + JSON.stringify(names));
+    if (dataArr.length < 6) {
+      return ContentService.createTextOutput("Error: Incomplete data received.");
+    }
 
-    // Write to Google Sheet
-    var timezone = "Asia/Manila";
-    var Curr_Date = new Date();
-    var formattedDate = Utilities.formatDate(Curr_Date, timezone, 'yyyy-MM-dd HH:mm:ss'); // Format date as 'yyyy-MM-dd HH:mm:ss'
+    var Curr_Date = Utilities.formatDate(new Date(), timezone, "MM/dd/yyyy");
+    var Curr_Time = Utilities.formatDate(new Date(), timezone, "hh:mm:ss a");
 
-    var ss = SpreadsheetApp.openById('11eI9HjerMCvbFDjZHwFqWVa-Ap2WRMz_S_gHgj8b6RM'); // Replace with your Sheet ID
-    var sheet = ss.getSheetByName('Sheet1'); // Replace 'Sheet1' with the name of your sheet
-    var nextRow = sheet.getLastRow() + 1; // Get the next row to insert data
-    var cleanedName = name.replace(/\x00/g, ""); // Removes all null bytes
+    // Data from Arduino code
+    var value0 = dataArr[0];  // Student ID
+    var value1 = dataArr[1];  // First Name
+    var value2 = dataArr[2];  // Last Name
+    var value3 = dataArr[3];  // Phone Number
+    var value4 = dataArr[4];  // Address
+    var value5 = dataArr[5];  // Gate Number
 
+    // STEP 1: Check if Student ID already exists for Time-Out
+    var data = sheet.getDataRange().getValues();
+    var row_number = 0;
+    var time_out = "";
 
-    // Write the formatted date and time to column A
-    sheet.getRange("A" + nextRow).setValue(formattedDate); // Timestamp
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] == value0) {  // Match Student ID
+        row_number = i + 1;
+        time_out = data[i][2];  // Time-Out in Column C
+        break;
+      }
+    }
 
-    // Write each name to a separate row (if multiple names)
-    names.forEach(function(name, index) {
-      sheet.getRange("C" + (nextRow + index)).setValue(name); // Name in column C
-    });
+    // STEP 2: Update Time-Out if not already set
+    if (row_number > 0 && time_out === "") {
+      sheet.getRange("C" + row_number).setValue(Curr_Time);
+      return ContentService.createTextOutput("Success: Time-Out recorded.");
+    } else if (time_out !== "") {
+      return ContentService.createTextOutput("Error: Time-Out already recorded.");
+    }
 
-    return ContentService.createTextOutput("Card holder name(s) stored successfully.");
-  } catch (error) {
-    Logger.log("Error: " + error.message);
-    return ContentService.createTextOutput("Error: " + error.message);
+    // Prevent duplicate entries
+    var isDuplicate = false;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] == value0) {
+        isDuplicate = true;
+        break;
+      }
+    }
+
+    if (isDuplicate) {
+      return ContentService.createTextOutput("Error: Student ID already exists.");
+    }
+
+    // STEP 3: Insert or Append Row
+    switch (parsedData.command) {
+      case "insert_row":
+        sheet.insertRows(2);  // Insert row below header
+        sheet.getRange('A2').setValue(value0);     // Student ID
+        sheet.getRange('B2').setValue(Curr_Time);  // Time-In
+        sheet.getRange('D2').setValue(value5);     // Gate Number
+        sheet.getRange('E2').setValue(Curr_Date);  // Date
+        sheet.getRange('F2').setValue(value1);     // First Name
+        sheet.getRange('G2').setValue(value2);     // Last Name
+        sheet.getRange('H2').setValue(value3);     // Phone Number
+        sheet.getRange('I2').setValue(value4);     // Address
+        SpreadsheetApp.flush();
+        str = "Success: New record inserted.";
+        break;
+
+      case "append_row":
+        var publish_array = [value0, Curr_Time, '', value5, Curr_Date, value1, value2, value3, value4];
+        sheet.appendRow(publish_array);
+        SpreadsheetApp.flush();
+        str = "Success: Row appended.";
+        break;
+
+      default:
+        str = "Error: Unknown command '" + parsedData.command + "'.";
+    }
+
+    // Return the result
+    return ContentService.createTextOutput(str);
+
+  } else {
+    return ContentService.createTextOutput("Error! Request body empty or in incorrect format.");
   }
 }
 
-function testEntry() {
-  const url = //"https://script.google.com/macros/s/AKfycbyowN6iu_KFKDELqpUtWbL45HDta0gMGNtmrK7FR6ntmMtjE6UpKFxXbMuioS-j8e8w/exec?name=testEntry";
- "https://script.google.com/macros/s/AKfycbxghr01s0Tk_DdzUTuMuh0ar5uhs4iAkCqMDbiTZOirWV6s6IEeJFtHd1VSLdPWJmkg/execname=testEntry";
-
-  try {
-    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    Logger.log("Response Code: " + response.getResponseCode());
-    Logger.log("Response Content: " + response.getContentText());
-  } catch (error) {
-    Logger.log("Error: " + error.toString());
-  }
-}
