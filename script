@@ -13,18 +13,31 @@ function doPost(e) {
     return ContentService.createTextOutput("Error in parsing request body: " + f.message);
   }
 
+  // Log parsed data to check if it's being received correctly
+  Logger.log("Parsed Data: " + JSON.stringify(parsedData));
+
   if (parsedData !== undefined) {
     var sheet = SS.getSheetByName(parsedData.sheet_name);
     if (!sheet) {
       return ContentService.createTextOutput("Error: Sheet '" + parsedData.sheet_name + "' not found.");
     }
 
-    // Enhanced sanitization to remove non-printable/control characters, including extended ASCII
+    // Enhanced sanitization to remove non-printable/control characters
     var sanitizedValues = parsedData.values.replace(/[^\x20-\x7E]/g, '').trim();
-    var dataArr = sanitizedValues.split(",");
+    // Log sanitized values for debugging
+    Logger.log("Sanitized Values: " + sanitizedValues);
 
-    if (dataArr.length < 6) {
-      return ContentService.createTextOutput("Error: Incomplete data received.");
+    if (sanitizedValues.length === 0) {
+      return ContentService.createTextOutput("Error: No valid data found.");
+    }
+
+    var dataArr = sanitizedValues.split(",");
+    // Log the split array to verify correct data structure
+    Logger.log("Data Array: " + dataArr);
+
+    // Check if all necessary fields are present
+    if (dataArr.length !== 6) {
+      return ContentService.createTextOutput("Error: Incorrect data format.");
     }
 
     var Curr_Date = Utilities.formatDate(new Date(), timezone, "MM/dd/yyyy");
@@ -96,7 +109,7 @@ function doPost(e) {
         break;
 
       default:
-        str = "Error: Unknown command '" + parsedData.command + "'.";
+        str = "Error: Unknown command '" + parsedData.command + "'.";  // Log if command is invalid
     }
 
     // Return the result
@@ -106,4 +119,5 @@ function doPost(e) {
     return ContentService.createTextOutput("Error! Request body empty or in incorrect format.");
   }
 }
+
 
