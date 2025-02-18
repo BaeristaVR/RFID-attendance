@@ -3,7 +3,6 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <HTTPSRedirect.h>
-
 #include<Wire.h>
 #include<LiquidCrystal_I2C.h>
 #include <AESLib.h>
@@ -287,5 +286,7 @@ void ReadDataFromBlock(int blockNum, byte readBlockData[])
   }
   //----------------------------------------------------------------------------
 }
+
+
 
 
